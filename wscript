@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # encoding: utf-8
 import sys
+import subprocess
 import os
 import fnmatch
 import glob
@@ -134,7 +135,10 @@ def configure_robot_dart(conf):
         conf.get_env()['BUILD_MAGNUM'] = True
         conf.env['magnum_libs'] = magnum.get_magnum_dependency_libs(conf, conf.env['magnum_dep_libs']) + magnum_integration.get_magnum_integration_dependency_libs(conf, 'Dart Eigen')
 
-    avx_dart = conf.check_avx(lib='dart', required=['dart', 'dart-utils', 'dart-utils-urdf'])
+    try:
+        avx_dart = conf.check_avx(lib='dart', required=['dart', 'dart-utils', 'dart-utils-urdf'])
+    except:
+        avx_dart = False
 
     native = ''
     native_icc = ''
@@ -275,6 +279,11 @@ def build_robot_dart(bld):
                 magnum_files.append(ffile)
             else:
                 files.append(ffile)
+    # External (TinyProcessLib)
+    for root, dirnames, filenames in os.walk(bld.path.abspath()+'/src/external/'):
+        for filename in fnmatch.filter(filenames, '*.cpp'):
+            ffile = os.path.join(root, filename)
+            magnum_files.append(ffile)
 
     files = [f[len(bld.path.abspath())+1:] for f in files]
     robot_dart_srcs = " ".join(files)
@@ -445,7 +454,7 @@ def build_examples(bld):
     path = bld.path.abspath() + '/res'
 
     # these examples should not be compiled without magnum
-    magnum_only = ['magnum_contexts.cpp', 'cameras.cpp', 'transparent.cpp']
+    magnum_only = ['magnum_contexts.cpp', 'cameras.cpp', 'transparent.cpp', 'graphics_tutorial.cpp', 'sensors_tutorial.cpp']
     # these examples should be compiled only without grpahics
     simu_only = ['scheduler.cpp', 'robot_pool.cpp']
     # these examples have their own rules
@@ -455,6 +464,8 @@ def build_examples(bld):
     for root, dirnames, filenames in os.walk(bld.path.abspath() + '/src/examples/'):
         for filename in fnmatch.filter(filenames, '*.cpp'):
             ffile = os.path.join(root, filename)
+            if 'old' in ffile:
+                continue
             basename = filename.replace('.cpp', '')
             # plain version
             if (filename not in exclude) and (filename not in magnum_only):
@@ -477,6 +488,19 @@ def build_examples(bld):
                             defines = ['GRAPHIC'],
                             target = basename)
 
+def build_docs(bld):
+    import macros
+    variables = macros.grab()
+    f = open(bld.path.abspath() + '/src/docs/include/macros.py', 'w')
+    vv = str(variables)
+    f.write('\ndef define_env(env):\n')
+    f.write('    variables = ' + vv.replace('\n', '\\n') + '\n')
+    f.write('    for v in variables.items():\n')
+    f.write('        env.variables[v[0]] = variables[v[0]]\n')
+    f.close()
+    Logs.pprint('NORMAL', "Generating HTML docs...")
+    s = 'cd ' + bld.path.abspath() + '/src/docs && mkdocs build'
+    retcode = subprocess.call(s, shell=True, env=None)
 
 class BuildExamples(BuildContext):
     cmd = 'examples'
